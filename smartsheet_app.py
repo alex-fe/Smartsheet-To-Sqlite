@@ -1,7 +1,6 @@
 import argparse
 import operator
 import os
-import re
 import smartsheet
 import sqlite3
 import yaml
