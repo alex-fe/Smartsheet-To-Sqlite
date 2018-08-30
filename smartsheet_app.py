@@ -1,8 +1,10 @@
 import argparse
 import os
+import pandas as pd
 import smartsheet
-import sqlite3
 import yaml
+
+from sqlalchemy import create_engine
 
 
 class Column(object):
@@ -17,11 +19,10 @@ class Column(object):
 class Sheet(object):
     def __init__(self, config):
         self.columns = []
-        self.columns_list = [mp['ss_col_name'] for mp in config['mappings']]
         self.db_file = config['db_file']
+        self.db_dir = os.path.dirname(self.db_file)
         self.mappings = config['mappings']
         self.name = config['sheet_name']
-        self.table = self.name.replace(' ', '_')
         self.token = config['access_token']
 
     @property
@@ -57,8 +58,24 @@ class Sheet(object):
         except StopIteration:
             raise SystemExit('Sheet {} was not found'.format(self.name))
         else:
-            self.sheet = ss_client.Sheets.get_sheet(self.id)
-            self.get_columns()
+            ss_client.Sheets.get_sheet_as_csv(self.id, self.db_dir)
+
+    def to_sql(self):
+        """Produce sqlite database from smartsheet columns."""
+        table = self.name.replace(' ', '_')
+        csv_name = '{}/{}.csv'.format(self.db_dir, self.name)
+        engine = create_engine('sqlite:///{}'.format(self.db_file), echo=False)
+        df = pd.read_csv(csv_name)
+        df.drop(['B', 'C'], axis=1, inplace=True)
+        df.rename(
+            columns={
+                mapping['ss_col_name']: mapping['db_col_name']
+                for mapping in self.mappings
+            },
+            inplace=True
+        )
+        df.to_sql(table, engine, if_exists='append', index=False)
+        os.remove(csv_name)
 
 
 def process_yml(path):
@@ -80,20 +97,6 @@ def process_yml(path):
     return Sheet(config)
 
 
-def to_sql(sheet):
-    """Produce sqlite database from smartsheet columns.
-    Args:
-        sheet (Sheet): Sheet object based on name given in .yml attribute
-            'sheet_name'.
-        config (dict): Parsed .yml file.
-    """
-    conn = sqlite3.connect(sheet.db_file)
-    conn = conn.cursor()
-    conn.execute('CREATE TABLE {} ({})'.format(sheet.table, sheet.column_strs))
-    conn.commit()
-    conn.close()
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run SmartSheet script.')
     parser.add_argument(
@@ -105,4 +108,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
     sheet = process_yml(args.config)
     sheet.pull()
-    to_sql(sheet)
+    sheet.to_sql()
