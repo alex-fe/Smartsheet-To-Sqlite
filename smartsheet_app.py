@@ -35,15 +35,17 @@ class Sheet(object):
         else:
             ss_client.Sheets.get_sheet_as_csv(self.id, self.db_dir)
 
-    def to_sql(self):
-        """Produce sqlite database from downloaded csv and pandas DataFrame."""
-        table = self.name.replace(' ', '_')
+    def prep_table(self):
+        """Create and prep DataFrame for export and removed gleaned CSV.
+        Returns:
+            Cleaned DataFrame.
+        """
         csv_name = '{}/{}.csv'.format(self.db_dir, self.name)
-        engine = create_engine('sqlite:///{}'.format(self.db_file), echo=False)
         df = pd.read_csv(csv_name)
+        os.remove(csv_name)
         drop_list = [
             c for c in df.columns.values.tolist()
-            if c not in [m['ss_col_name'] for m in self.mappings]
+            if c not in [mapping['ss_col_name'] for mapping in self.mappings]
         ]
         df.drop(drop_list, axis=1, inplace=True)
         df.rename(
@@ -53,8 +55,16 @@ class Sheet(object):
             },
             inplace=True
         )
-        df.to_sql(table, engine, if_exists='append', index=False)
-        os.remove(csv_name)
+        return df
+
+    def to_sql(self, df):
+        """Produce sqlite database from pandas DataFrame.
+        Args:
+            df (pd.DataFrame): Compiled SmartSheet data
+        """
+        table = self.name.replace(' ', '_')
+        engine = create_engine('sqlite:///{}'.format(self.db_file), echo=False)
+        df.to_sql(table, engine, if_exists='replace', index=False)
 
 
 def process_yml(path):
@@ -87,4 +97,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
     sheet = process_yml(args.config)
     sheet.pull()
-    sheet.to_sql()
+    df = sheet.prep_table()
+    sheet.to_sql(df)
