@@ -1,9 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
-from smartsheet_app import (
-    COLUMN_TYPES, create_sql_command, filter_cols, process_yml
-)
+from smartsheet_app import COLUMN_TYPES, filter_cols, process_yml
 
 
 class TestProcessYML(unittest.TestCase):
@@ -74,14 +72,6 @@ class TestToSQL(unittest.TestCase):
         self.assertEqual(len(list(columns)), len((self.config['mappings'])))
         for col in columns:
             self.assertIn(col.title, correct_names)
-
-    def test_create_sql_command(self):
-        message = create_sql_command(self.sheet, self.config)
-        # assert table name is included
-        self.assertIn(self.sheet.name.replace(' ', '_'), message)
-        # assert columns are accounted for
-        for col in self.config['mappings']:
-            self.assertIn(col['db_col_name'], message)
 
 
 if __name__ == '__main__':
