@@ -7,15 +7,6 @@ import yaml
 from sqlalchemy import create_engine
 
 
-class Column(object):
-    def __init__(self, column, column_mapping):
-        self.title = column.title
-        self.type = column.type
-        self.data = ''
-        self.ss_name = column_mapping['ss_col_name']
-        self.db_name = column_mapping['db_col_name']
-
-
 class Sheet(object):
     def __init__(self, config):
         self.columns = []
@@ -24,22 +15,6 @@ class Sheet(object):
         self.mappings = config['mappings']
         self.name = config['sheet_name']
         self.token = config['access_token']
-
-    @property
-    def column_strs(self):
-        return ', '.join(col.db_name for col in self.columns)
-
-    def get_columns(self):
-        for column_mapping in self.mappings:
-            try:
-                column = next(
-                    col for col in self.sheet.columns
-                    if column_mapping['ss_col_name'] == col.title
-                )
-            except StopIteration:
-                pass
-            else:
-                self.columns.append(Column(column, column_mapping))
 
     def pull(self):
         """Find and parse specified sheet via smartsheet api.
@@ -61,12 +36,16 @@ class Sheet(object):
             ss_client.Sheets.get_sheet_as_csv(self.id, self.db_dir)
 
     def to_sql(self):
-        """Produce sqlite database from smartsheet columns."""
+        """Produce sqlite database from downloaded csv and pandas DataFrame."""
         table = self.name.replace(' ', '_')
         csv_name = '{}/{}.csv'.format(self.db_dir, self.name)
         engine = create_engine('sqlite:///{}'.format(self.db_file), echo=False)
         df = pd.read_csv(csv_name)
-        df.drop(['B', 'C'], axis=1, inplace=True)
+        drop_list = [
+            c for c in df.columns.values.tolist()
+            if c not in [m['ss_col_name'] for m in self.mappings]
+        ]
+        df.drop(drop_list, axis=1, inplace=True)
         df.rename(
             columns={
                 mapping['ss_col_name']: mapping['db_col_name']
