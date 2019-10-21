@@ -12,4 +12,4 @@ requests-toolbelt==0.8.0
 six==1.11.0
 smartsheet-python-sdk==1.3.3
 SQLAlchemy==1.2.11
-urllib3==1.23
+urllib3==1.24.2
